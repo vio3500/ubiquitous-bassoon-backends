@@ -1,9 +1,10 @@
 const express = require('express');
 const app = express();
-const userRouter = require('./router/user');
 
-app.use('/user', userRouter);
-app.use('/post', userRouter);
+const router = require('./router');
+router(app);
 
-
-app.listen(5000, () => console.log('Server is running on port 5000'));
+const port = 5000;
+app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`)
+});
