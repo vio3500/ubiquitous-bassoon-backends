@@ -3,7 +3,7 @@ const app = express();
 
 const cors = require('cors');
 app.use(cors({
-    origin: ''
+    origin: 'http://localhost:3000'
 }))
 
 const mysql = require('mysql2/promise');
@@ -17,7 +17,7 @@ db = mysql.createPool({
 const bodyParser = require('body-parser');
 app.use(bodyParser.json());
 
-const {setToken, tokenAuth, decodeJwt} = require('./tokenAuth')
+const {setToken, decodeJwt} = require('./tokenAuth')
 
 // 1.注册接口
 app.post('/teachers/register', async (req, res) => {
@@ -71,8 +71,148 @@ app.post('/courses', decodeJwt, async (req, res) => {
 })
 
 // 5. 删除课程
-app.delete('/courses/:courseID', tokenAuth, async(req,res) => {
+app.delete('/courses/:courseId', decodeJwt, async(req,res) => {
+    const courseId = req.params.courseId
+    await db.execute(`
+    UPDATE course
+    SET is_deleted = 1
+    WHERE id = ?
+    `,[courseId])
+    res.json({code:0});
+})
 
+// 6. 获取学生
+app.get('/courses/:courseId/students', decodeJwt, async(req, res) => {
+    const {courseId} = req.params;
+    const [students] = await db.execute(`
+    SELECT id, name
+    FROM student
+    WHERE course_id = ? AND is_deleted = 0`, [courseId])
+    res.json(students);
+})
+
+// 7. 添加学生
+app.post('/courses/:courseId/students', decodeJwt, async (req, res) => {
+    const {name: studentName} = req.body;
+    const {courseId} = req.params;
+    await db.execute(`
+    INSERT INTO student(name, course_id)
+    VALUES(?, ?)`, [studentName, courseId])
+    res.json({code:0});
+})
+
+// 8. 删除学生
+app.delete('/courses/:courseId/students/:studentId', decodeJwt, async (req, res) => {
+    const {studentId} = req.params;
+    await db.execute(`
+    UPDATE student
+    SET is_deleted = 1
+    WHERE student_id = ? AND is_deleted = 0`, [studentId]);
+    res.json({code:0});
+})
+
+// 9.添加课时
+app.post('/courses/:courseId/classes', decodeJwt, async(req,res,next) => {
+    const {courseId} = req.params;
+    const {timestamp} = req.body;
+    const date = new Date(timestamp).setHours(0,0,0,0)
+    const session = new Date(timestamp).getHours < 12 ? 0: 1
+    await db.execute(`
+    INSERT INTO class(course_id, date, session)
+    VALUES(?, ?, ?)`
+    , [courseId, date, session])
+    res.json({code:0});
+})
+
+// 10. 获取课程的所有异常考勤
+app.get('/courses/:courseId/attendances', decodeJwt, async(req, res) => {
+    const {courseId} = req.params;
+    const {attendances} = await db.execute(`
+    SELECT stu.name, cls.date, clas.session, att.status
+    FROM attendance att
+    JOIN student stu ON stu.id = att.student_id
+    JOIN class cls ON cls.id = att.student_id
+    JOIN class cls ON cls.id = att.class_id
+    WHERE att.course_id = ? AND att.status != 0
+    ORDER BY cls.date, cls.session`, [courseId])
+    res.json(attendances);
+})
+
+// 11. 获取一节课的考勤
+app.get('/courses/:courseId/attendances/classes/:classId', decodeJwt, async(req, res) => {
+    const {classId} = req.params;
+    const [attendances] = await db.execute(`
+    SELECT student_id, status
+    FROM attendance
+    WHERE class_id = ?`,[classId]);
+    res.json(attendances)
+})
+
+// 12.添加考勤记录
+app.post('/courses/:courseId/attendances/classes/:classId/students/:studentId', decodeJwt, async(req, res) => {
+    const {courseId, classId, studentId} = req.params;
+    const {status} = req.body
+    await db.execute(`
+    INSERT INTO attendance(course_id, class_id, student_id, status)
+    VALUES(?, ?, ?, ?,)`, [courseId, classId, studentId, status])
+    res.json({code:0});
+})
+
+// 13. 修改考勤记录
+app.patch('/courses/:courseId/attendances/classes/:classId/students/:studentId', decodeJwt, async(req, res) => {
+    const  {classId, studentId} = req.params;
+    const {status} = req.body;
+    await db.execute(`
+    UPDATE attendance
+    SET status = ?
+    WHERE student_id = ? AND class_id = ?`, [status, studentId, classId]);
+    res.json({code:0});
+})
+
+// 14. 获取课程的所有得分记录
+app.get('/courses/:courseId/scores', decodeJwt, async(req, res) => {
+    const {courseId} = req.params;
+    const [scores] = await db.execute(`
+    SELECT stu.name, cls.date, cls.session, sc.score
+    FROM score scJOIN student stu ON stu.id = sc.student_id
+    JOIN class cls ON cls.id = sc.class_id
+    WHERE sc.course_id = ?
+    ORDER BY cls.date, cls.session`,[courseId])
+    res.json(scores);
+})
+
+// 15. 获取一节课的所有学生的得分记录
+app.get('/courses/:courseId/scores/classes/:classId', decodeJwt, async(req, res) => {
+    const {classId} = req.params;
+    const [scores] = await db.execute(`
+    SELECT student_id, score
+    FROM score
+    WHERE class_id = ?
+    `, [classId])
+    res.json(scores)
+})
+
+// 16. 添加积分记录
+app.post('/courses/:courseId/scores/classes/:classId/students/:studentId', decodeJwt, async(req, res) => {
+    const { score } = req.body
+    const { courseId, classId, studentId } = req.params;
+    await db.execute(`
+    INSERT INTO score (course_id, class_id, student_id, score)
+    VALUES(?, ?, ?, ?)`,
+    [courseId, classId, studentId, score])
+    res.json({code:0});
+})
+
+// 17.修改积分记录
+app.patch('/courses/:courseId/scores/classes/:classId/students/studentId', decodeJwt, async(req, res) => {
+    const {classId, studentId} = req.params;
+    const {score} = req.body;
+    await db.execute(`
+    UPDATE score
+    SET score = ?
+    WHERE student_id = ? AND class_id = ?
+    `, [score, studentId, classId])
+    res.json({code:0});
 })
 
 const port = 5000;
