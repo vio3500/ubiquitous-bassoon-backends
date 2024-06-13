@@ -9,9 +9,9 @@ app.use(cors({
 const mysql = require('mysql2/promise');
 db = mysql.createPool({
     host: 'localhost',
-    user: 'root',
-    password: '@Linux7631',
-    database: 'dbms'
+    user: 'backend_access',
+    password: 'password123456',
+    database: 'teacher_helper_system_database'
 });
 
 const bodyParser = require('body-parser');
@@ -51,7 +51,7 @@ app.post('/teachers/login', async (req, res) => {
 app.get('/courses', decodeJwt, async (req, res) => {
     const teacherId = res.locals.teacherId;
     const [courses] = await db.execute(`
-    SELECT id, name
+    SELECT id, course_id, name
     FROM course
     WHERE teacher_id = ? AND is_deleted = 0
     `, [teacherId]
@@ -62,10 +62,13 @@ app.get('/courses', decodeJwt, async (req, res) => {
 // 4. 添加课程
 app.post('/courses', decodeJwt, async (req, res) => {
     const teacherID = res.locals.teacherId;
-    const {name: courseName} = req.body
+    const {
+        course_id: CourseId,
+        name: Name
+    } = req.body
     await db.execute(`
-    INSERT INTO course(name, teacher_id)
-    VALUES(?, ?)`, [courseName, teacherID]
+    INSERT INTO course(course_id, name, teacher_id)
+    VALUES(?, ?, ?)`, [CourseId, Name, teacherID]
     );
     res.json({code:0})
 })
@@ -107,7 +110,7 @@ app.delete('/courses/:courseId/students/:studentId', decodeJwt, async (req, res)
     await db.execute(`
     UPDATE student
     SET is_deleted = 1
-    WHERE student_id = ? AND is_deleted = 0`, [studentId]);
+    WHERE id = ? AND is_deleted = 0`, [studentId]);
     res.json({code:0});
 })
 
