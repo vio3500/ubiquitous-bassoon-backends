@@ -19,7 +19,7 @@ const decodeJwt = (req, res, next) => {
     ? jwt.verify(token, jwtConfig.secretKey)
         : undefined;
     if (!payload){
-        return res.send('Fuck you asshole, come again Ill fuck you bitch')
+        return res.send('Error')
     }
     res.locals.teacherId = payload.id;
     next()
