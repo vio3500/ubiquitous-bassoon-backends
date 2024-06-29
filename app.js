@@ -115,17 +115,25 @@ app.delete('/courses/:courseId/students/:studentId', decodeJwt, async (req, res)
 })
 
 // 9.添加课时
-app.post('/courses/:courseId/classes', decodeJwt, async(req,res,next) => {
-    const {courseId} = req.params;
-    const {timestamp} = req.body;
-    const date = new Date(timestamp).setHours(0,0,0,0)
-    const session = new Date(timestamp).getHours < 12 ? 0: 1
-    await db.execute(`
-    INSERT INTO class(course_id, date, session)
-    VALUES(?, ?, ?)`
-    , [courseId, date, session])
-    res.json({code:0});
-})
+app.post('/courses/:courseId/classes', decodeJwt, async (req, res, next) => {
+    const { courseId } = req.params;
+    const { timestamp } = req.body; // timestamp should be in milliseconds
+    const date = new Date(parseInt(timestamp));
+    const formattedDate = date.toISOString().split('T')[0]; // Format as 'YYYY-MM-DD'
+    const session = date.getHours() < 12 ? 0 : 1;
+
+    try {
+        const [result] = await db.execute(`
+            INSERT INTO class(course_id, date, session)
+            VALUES(?, ?, ?)`, [courseId, formattedDate, session]);
+
+        const classId = result.insertId; // Get the last inserted ID
+        res.json({ code: 0, class_id: classId });
+    } catch (error) {
+        next(error);
+    }
+});
+
 
 // 10. 获取课程的所有异常考勤
 app.get('/courses/:courseId/attendances', decodeJwt, async(req, res) => {
@@ -177,7 +185,7 @@ app.get('/courses/:courseId/scores', decodeJwt, async(req, res) => {
     const {courseId} = req.params;
     const [scores] = await db.execute(`
     SELECT stu.name, cls.date, cls.session, sc.score
-    FROM score scJOIN student stu ON stu.id = sc.student_id
+    FROM score sc JOIN student stu ON stu.id = sc.student_id
     JOIN class cls ON cls.id = sc.class_id
     WHERE sc.course_id = ?
     ORDER BY cls.date, cls.session`,[courseId])
